@@ -15,7 +15,7 @@ st.write("Verze 10.0 - Detekce přesnosti adres a finální Google Maps trasa.")
 
 # Boční panel s klíči
 st.sidebar.header("Nastavení API")
-MAPY_API_KEY = st.sidebar.text_input("1. Mapy.cz API Klíč", type="password")
+MAPY_API_KEY = st.sidebar.text_input("1. Mapy.cz API Klíč", value="UDc2V4K-B7UO5LBy3KQt8Fh9CmEIpp-mQTkuXJZNuzE", type="password")
 ORS_API_KEY = st.sidebar.text_input("2. OpenRouteService Klíč", value="eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjUwMDIzODBhNTFlMDRmOGM5ZTdiMDQxMDVmYWViZTE1IiwiaCI6Im11cm11cjY0In0=", type="password")
 
 st.sidebar.subheader("Zdroj dat")
