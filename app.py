@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import io
+import re
 
 st.set_page_config(page_title="Panelora Logistics Planner", layout="wide", page_icon="🚚")
 
@@ -11,7 +12,7 @@ SKLAD_LON = 18.44091600719715
 # -------------------------------------
 
 st.title("🚚 PANELORA Logistics Planner")
-st.write("Verze 10.0 - Detekce přesnosti adres a finální Google Maps trasa.")
+st.write("Verze 10.1 - Opravené čtení českých CSV souborů (UTF-8 / CP1250).")
 
 # Boční panel s klíči
 st.sidebar.header("Nastavení API")
@@ -29,18 +30,33 @@ if source_type == "Permanentní URL odkaz z Shoptetu":
         with st.spinner("Stahuji data..."):
             try:
                 response = requests.get(SHOPTET_URL)
-                response.encoding = 'utf-8'
-                df = pd.read_csv(io.StringIO(response.text), sep=';')
+                # Zkusíme automatickou detekci, případně UTF-8 / CP1250 fallback
+                try:
+                    df = pd.read_csv(io.StringIO(response.text), sep=';')
+                except Exception:
+                    response.encoding = 'cp1250'
+                    df = pd.read_csv(io.StringIO(response.text), sep=';')
             except Exception as e:
-                st.sidebar.error(f"Chyba: {e}")
+                st.sidebar.error(f"Chyba stahování z URL: {e}")
 else:
     uploaded_file = st.sidebar.file_uploader("Přetáhni CSV soubor", type=["csv"])
     if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file, sep=';', encoding='utf-8')
+        try:
+            # Pokus 1: Načíst jako UTF-8 (včetně souborů s BOM z Excelu)
+            df = pd.read_csv(uploaded_file, sep=';', encoding='utf-8-sig')
+        except Exception:
+            try:
+                # Pokus 2: Pokud to selže, vrátíme se na začátek a zkusíme české kódování Windows
+                uploaded_file.seek(0)
+                df = pd.read_csv(uploaded_file, sep=';', encoding='cp1250')
+            except Exception as e:
+                st.sidebar.error(f"Soubor nelze přečíst (zkontrolujte středníky): {e}")
 
 if not df.empty:
     st.subheader("📋 Načtené objednávky")
-    st.dataframe(df[['code', 'deliveryFullName', 'deliveryStreetWithHouseNumber', 'deliveryCity']], use_container_width=True)
+    # Zobrazíme jen sloupce, které v souboru reálně jsou, abychom předešli dalším chybám
+    dostupne_sloupce = [col for col in ['code', 'deliveryFullName', 'deliveryStreetWithHouseNumber', 'deliveryCity'] if col in df.columns]
+    st.dataframe(df[dostupne_sloupce], use_container_width=True)
     
     if st.button("🚀 Spustit výpočet trasy", type="primary"):
         
@@ -60,7 +76,6 @@ if not df.empty:
                 if ulice == 'nan' or mesto == 'nan' or not ulice:
                     continue
                 
-                # Zjednodušený dotaz (bez PSČ) pomáhá Mapám trefit se lépe
                 vyhledavany_text = f"{ulice}, {mesto}"
                 
                 try:
@@ -84,7 +99,6 @@ if not df.empty:
                         lon = float(item['position']['lon'])
                         lat = float(item['position']['lat'])
                         
-                        # --- DETEKTOR PŘESNOSTI ---
                         item_type = item.get('type', '').lower()
                         if 'address' in item_type:
                             presnost = "✅ Dům"
@@ -92,7 +106,6 @@ if not df.empty:
                             presnost = "⚠️ Ulice (odchylka)"
                         else:
                             presnost = "❌ Město (velká odchylka)"
-                        # --------------------------
                         
                         coordinates.append([lon, lat])
                         valid_orders.append({
@@ -136,7 +149,7 @@ if not df.empty:
                 
                 ordered_route = []
                 
-                # --- OFICIÁLNÍ GOOGLE MAPS URL ---
+                # Sestavení standardního Google Maps odkazu
                 gmaps_url = "https://www.google.com/maps/dir"
                 gmaps_url += f"/{SKLAD_LAT},{SKLAD_LON}"
                 
@@ -148,7 +161,6 @@ if not df.empty:
                         gmaps_url += f"/{order['lat']},{order['lon']}"
                 
                 gmaps_url += f"/{SKLAD_LAT},{SKLAD_LON}"
-                # ---------------------------------
                 
                 st.balloons()
                 st.success("Hotovo! Trasa je naplánována.")
@@ -157,7 +169,6 @@ if not df.empty:
                 st.subheader("📋 Přesný harmonogram rozvozu")
                 df_final = pd.DataFrame(ordered_route)
                 
-                # Obarvení sloupce s přesností pro řidiče
                 def highlight_precision(val):
                     if '✅' in str(val): return 'color: #00b300; font-weight: bold;'
                     elif '⚠️' in str(val): return 'color: #ff9900; font-weight: bold;'
@@ -172,3 +183,5 @@ if not df.empty:
                 st.map(pd.concat([sklad_df, map_df]))
             else:
                 st.error(f"Chyba optimalizace: {response.text}")
+else:
+    st.info("💡 Čekám na nahrání souboru nebo zadání URL ze Shoptetu v levém panelu.")
