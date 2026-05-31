@@ -175,7 +175,7 @@ if not df.empty:
                     elif '❌' in str(val): return 'color: #e60000; font-weight: bold;'
                     return ''
                 
-                st.dataframe(df_final[['Kód', 'Jméno', 'Adresa', 'Telefon', 'Přesnost']].style.applymap(highlight_precision, subset=['Přesnost']), use_container_width=True)
+                st.dataframe(df_final[['Kód', 'Jméno', 'Adresa', 'Telefon', 'Přesnost']].style.map(highlight_precision, subset=['Přesnost']), use_container_width=True)
                 
                 st.subheader("🗺️ Reálná mapa zastávek")
                 map_df = pd.DataFrame(ordered_route)[['lat', 'lon']]
